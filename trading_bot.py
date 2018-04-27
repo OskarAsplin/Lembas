@@ -129,7 +129,9 @@ class InvestCritera(object):
 
 
 class TradingBot(object):
-	def __init__(self, interval=60):
+	def __init__(self, interval=60, internal_trading=False, cross_exchange_trading=False):
+		self.internal_trading = internal_trading
+		self.cross_exchange_trading = cross_exchange_trading
 		currency_rate.update_rates()
 		currency_rate.update_days_diff()
 		k_trader = kraken_api.KrakenTrader()
@@ -175,45 +177,47 @@ class TradingBot(object):
 						change = (currency_rate.USD_to_EUR - rate_before) * self.usd_kraken
 						logger.info('Currency rate change loss/profit: {:.2f}\tNew USD_to_EUR rate: {:}'.format(change, currency_rate.USD_to_EUR))
 				
-				coins = ['ETH', 'LTC']
-				for coin in coins:
-					# ---------------- Kraken -------------------------
-					if self.euro_kraken > (rules.buy_euro_kraken[coin] + 50):
-						[trade, _, price] = self.criteria_check.cross_invest_criteria(coin, from_trader=self.kraken_trade_tools, to_trader=self.gdax_trade_tools)
-						if trade:
-							self.deal_in_progress = True
-							amount = rules.buy_euro_kraken[coin]/price
-							logger.info('Attempting cross exchange trade from Kraken. Coin: {:}\tAmount: {:.6f}\tPrice: {:.2f}'.format(coin, amount, price))
-							code = self.trade_machine.cross_exchange_trade(from_exchange_tools=self.kraken_trade_tools, to_exchange_tools=self.gdax_trade_tools, 
-								coin=coin, amount_coin=amount, fun_critera=self.criteria_check.cross_invest_criteria)
-						if code != 0:
-							break
+				if self.cross_exchange_trading:
+					coins = ['ETH', 'LTC']
+					for coin in coins:
+						# ---------------- Kraken -------------------------
+						if self.euro_kraken > (rules.buy_euro_kraken[coin] + 50):
+							[trade, _, price] = self.criteria_check.cross_invest_criteria(coin, from_trader=self.kraken_trade_tools, to_trader=self.gdax_trade_tools)
+							if trade:
+								self.deal_in_progress = True
+								amount = rules.buy_euro_kraken[coin]/price
+								logger.info('Attempting cross exchange trade from Kraken. Coin: {:}\tAmount: {:.6f}\tPrice: {:.2f}'.format(coin, amount, price))
+								code = self.trade_machine.cross_exchange_trade(from_exchange_tools=self.kraken_trade_tools, to_exchange_tools=self.gdax_trade_tools, 
+									coin=coin, amount_coin=amount, fun_critera=self.criteria_check.cross_invest_criteria)
+							if code != 0:
+								break
 
-					# ---------------- GDAX ---------------------------
-					if self.euro_gdax > (rules.buy_euro_gdax[coin] + 50):
-						[trade, _, price] = self.criteria_check.cross_invest_criteria(coin, from_trader=self.gdax_trade_tools, to_trader=self.kraken_trade_tools)
-						if trade:
-							self.deal_in_progress = True
-							amount = rules.buy_euro_gdax[coin]/price
-							logger.info('Attempting cross exchange trade from GDAX. Coin: {:}\tAmount: {:6f}\tPrice: {:.2f}'.format(coin, amount, price))
-							code = self.trade_machine.cross_exchange_trade(from_exchange_tools=self.gdax_trade_tools, to_exchange_tools=self.kraken_trade_tools, 
-								coin=coin, amount_coin=amount, fun_critera=self.criteria_check.cross_invest_criteria)
-						if code != 0:
-							break
+						# ---------------- GDAX ---------------------------
+						if self.euro_gdax > (rules.buy_euro_gdax[coin] + 50):
+							[trade, _, price] = self.criteria_check.cross_invest_criteria(coin, from_trader=self.gdax_trade_tools, to_trader=self.kraken_trade_tools)
+							if trade:
+								self.deal_in_progress = True
+								amount = rules.buy_euro_gdax[coin]/price
+								logger.info('Attempting cross exchange trade from GDAX. Coin: {:}\tAmount: {:6f}\tPrice: {:.2f}'.format(coin, amount, price))
+								code = self.trade_machine.cross_exchange_trade(from_exchange_tools=self.gdax_trade_tools, to_exchange_tools=self.kraken_trade_tools, 
+									coin=coin, amount_coin=amount, fun_critera=self.criteria_check.cross_invest_criteria)
+							if code != 0:
+								break
 
-				# Internal trading on Kraken ---------------------------------------------
-				if code == 0:
-					[trade, diff, coin] = self.criteria_check.internal_invest_criteria(self.kraken_trade_tools)
-					print('{:}: {:.2f}\t coin: {:}'.format(trade, diff, coin))
-					if trade == 'to_EUR' or trade == 'to_USD':
-						b_curr = 'USD' if trade == 'to_EUR' else 'EUR'
-						s_curr = 'EUR' if trade == 'to_EUR' else 'USD'
-						[trade, diff, price] = self.kraken_trade_tools.internal_limit_buy_diff(coin, b_currency=b_curr, s_currency=s_curr)
-						print('Double check trade:{:}, diff: {:.2f}'.format(trade, diff))
-						if trade:
-							logger.info('Attempting internal trade. Coin: {:}\tB_currency: {:}\tS_currency: {:}'.format(coin, b_curr, s_curr))
-							self.deal_in_progress = True
-							code = self.trade_machine.internal_trade(self.kraken_trade_tools, coin, b_currency=b_curr, s_currency=s_curr)
+				if self.internal_trading:
+					# Internal trading on Kraken ---------------------------------------------
+					if code == 0:
+						[trade, diff, coin] = self.criteria_check.internal_invest_criteria(self.kraken_trade_tools)
+						print('{:}: {:.2f}\t coin: {:}'.format(trade, diff, coin))
+						if trade == 'to_EUR' or trade == 'to_USD':
+							b_curr = 'USD' if trade == 'to_EUR' else 'EUR'
+							s_curr = 'EUR' if trade == 'to_EUR' else 'USD'
+							[trade, diff, price] = self.kraken_trade_tools.internal_limit_buy_diff(coin, b_currency=b_curr, s_currency=s_curr)
+							print('Double check trade:{:}, diff: {:.2f}'.format(trade, diff))
+							if trade:
+								logger.info('Attempting internal trade. Coin: {:}\tB_currency: {:}\tS_currency: {:}'.format(coin, b_curr, s_curr))
+								self.deal_in_progress = True
+								code = self.trade_machine.internal_trade(self.kraken_trade_tools, coin, b_currency=b_curr, s_currency=s_curr)
 
 				# ---------------- Test if all is well after a trade ---------------------
 				# code:
